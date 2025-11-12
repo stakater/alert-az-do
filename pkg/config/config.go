@@ -129,6 +129,7 @@ type ReceiverConfig struct {
 	Organization        string `yaml:"organization" json:"organization"`
 	TenantID            string `yaml:"tenant_id" json:"tenant_id"`
 	ClientID            string `yaml:"client_id" json:"client_id"`
+	SubscriptionID      string `yaml:"subscription_id" json:"subscription_id"`
 	ClientSecret        Secret `yaml:"client_secret" json:"client_secret"`
 	PersonalAccessToken Secret `yaml:"personal_access_token" json:"personal_access_token"`
 
@@ -205,8 +206,24 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return err
 	}
 
-	if (c.Defaults.TenantID != "" || c.Defaults.ClientID != "" || c.Defaults.ClientSecret != "") && c.Defaults.PersonalAccessToken != "" {
-		return fmt.Errorf("bad auth config in defaults section: TenantID/ClientID/ClientSecret and PAT authentication are mutually exclusive")
+	// Check for mutually exclusive authentication methods in defaults
+	hasServicePrincipal := c.Defaults.TenantID != "" && c.Defaults.ClientID != "" && c.Defaults.ClientSecret != ""
+	hasManagedIdentity := c.Defaults.ClientID != "" && c.Defaults.SubscriptionID != ""
+	hasPAT := c.Defaults.PersonalAccessToken != ""
+
+	authMethodCount := 0
+	if hasServicePrincipal {
+		authMethodCount++
+	}
+	if hasManagedIdentity && !hasServicePrincipal { // Managed Identity only if not Service Principal
+		authMethodCount++
+	}
+	if hasPAT {
+		authMethodCount++
+	}
+
+	if authMethodCount > 1 {
+		return fmt.Errorf("bad auth config in defaults section: Service Principal (TenantID+ClientID+ClientSecret), Managed Identity (ClientID+SubscriptionID), and PAT authentication are mutually exclusive")
 	}
 
 	if c.Defaults.AutoResolve != nil {
@@ -231,38 +248,58 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 			return fmt.Errorf("invalid organization %q in receiver %q: %s", rc.Organization, rc.Name, err)
 		}
 
-		if (rc.TenantID != "" || rc.ClientID != "" || rc.ClientSecret != "") && rc.PersonalAccessToken != "" {
-			return fmt.Errorf("bad auth config in receiver %q: TenantID/ClientID/ClientSecret and PAT authentication are mutually exclusive", rc.Name)
+		// Check for mutually exclusive authentication methods in receiver
+		rcServicePrincipal := rc.TenantID != "" && rc.ClientID != "" && rc.ClientSecret != ""
+		rcManagedIdentity := rc.ClientID != "" && rc.SubscriptionID != ""
+		rcPAT := rc.PersonalAccessToken != ""
+
+		rcAuthMethodCount := 0
+		if rcServicePrincipal {
+			rcAuthMethodCount++
+		}
+		if rcManagedIdentity && !rcServicePrincipal { // Managed Identity only if not Service Principal
+			rcAuthMethodCount++
+		}
+		if rcPAT {
+			rcAuthMethodCount++
 		}
 
-		// Fix: Check if we need to use OAuth (TenantID/ClientID/ClientSecret) or PAT
-		if rc.PersonalAccessToken == "" {
-			// PAT is not provided, so we need OAuth credentials
-			if rc.TenantID == "" && c.Defaults.TenantID != "" {
-				rc.TenantID = c.Defaults.TenantID
-			}
+		if rcAuthMethodCount > 1 {
+			return fmt.Errorf("bad auth config in receiver %q: Service Principal (TenantID+ClientID+ClientSecret), Managed Identity (ClientID+SubscriptionID), and PAT authentication are mutually exclusive", rc.Name)
+		}
 
-			if rc.ClientID == "" && c.Defaults.ClientID != "" {
-				rc.ClientID = c.Defaults.ClientID
-			}
-
-			if rc.ClientSecret == "" && c.Defaults.ClientSecret != "" {
-				rc.ClientSecret = c.Defaults.ClientSecret
-			}
-
-			// Check if we have complete OAuth credentials
-			if rc.TenantID == "" || rc.ClientID == "" || rc.ClientSecret == "" {
-				// OAuth is incomplete, check if we can use PAT from defaults
-				if c.Defaults.PersonalAccessToken != "" {
-					rc.PersonalAccessToken = c.Defaults.PersonalAccessToken
-				} else {
-					return fmt.Errorf("missing authentication in receiver %q", rc.Name)
-				}
-			}
+		// Determine authentication method and validate completeness
+		if rcPAT {
+			// PAT authentication - no other fields needed
+		} else if rcServicePrincipal {
+			// Service Principal authentication is complete - no defaults needed
+		} else if rcManagedIdentity {
+			// Managed Identity authentication is complete - no defaults needed
 		} else {
-			// PAT is provided, check for conflicts with OAuth fields
-			if rc.TenantID != "" || rc.ClientID != "" || rc.ClientSecret != "" {
-				return fmt.Errorf("TenantID/ClientID/ClientSecret and PAT authentication are mutually exclusive in receiver %q", rc.Name)
+			// No complete authentication method in receiver, try to inherit from defaults
+			if c.Defaults.PersonalAccessToken != "" {
+				rc.PersonalAccessToken = c.Defaults.PersonalAccessToken
+			} else if hasServicePrincipal {
+				// Inherit Service Principal from defaults
+				if rc.TenantID == "" {
+					rc.TenantID = c.Defaults.TenantID
+				}
+				if rc.ClientID == "" {
+					rc.ClientID = c.Defaults.ClientID
+				}
+				if rc.ClientSecret == "" {
+					rc.ClientSecret = c.Defaults.ClientSecret
+				}
+			} else if hasManagedIdentity {
+				// Inherit Managed Identity from defaults
+				if rc.ClientID == "" {
+					rc.ClientID = c.Defaults.ClientID
+				}
+				if rc.SubscriptionID == "" {
+					rc.SubscriptionID = c.Defaults.SubscriptionID
+				}
+			} else {
+				return fmt.Errorf("missing authentication in receiver %q", rc.Name)
 			}
 		}
 

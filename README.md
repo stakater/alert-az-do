@@ -15,7 +15,7 @@ If a corresponding Azure DevOps work item already exists but is resolved, it is 
 
 ## Features
 
-- **Multiple Authentication Methods**: Support for both Azure AD OAuth (Client ID/Secret) and Personal Access Tokens (PAT)
+- **Multiple Authentication Methods**: Support for Service Principal, Managed Identity, and Personal Access Token authentication
 - **Flexible Work Item Creation**: Create different types of work items (Bug, Task, Issue, etc.) based on alert content
 - **Template-based Content**: Use Go templates to generate dynamic work item titles, descriptions, and field values
 - **Auto-resolution**: Automatically resolve work items when alerts are resolved
@@ -23,6 +23,7 @@ If a corresponding Azure DevOps work item already exists but is resolved, it is 
 - **Multi-project Support**: Search across multiple projects for existing work items
 - **Label Management**: Copy Prometheus labels as Azure DevOps tags
 - **Update Modes**: Choose between updating work items directly or adding comments
+- **Environment Variable Support**: Environment variables take precedence over config file settings
 
 ## Usage
 
@@ -75,30 +76,74 @@ Similar to Alertmanager, alert-az-do supports environment variable substitution 
 
 ### Authentication
 
-alert-az-do supports two authentication methods:
+alert-az-do supports three authentication methods with automatic precedence handling:
 
-1. **Azure AD OAuth** (recommended for production):
-   ```yaml
-   organization: contoso
-   tenant_id: your-tenant-id
-   client_id: your-client-id
-   client_secret: $(CLIENT_SECRET)
-   ```
+#### 1. Service Principal (recommended for applications)
+Use when running alert-az-do as an application with Azure AD registration:
 
-2. **Personal Access Token**:
-   ```yaml
-   organization: contoso
-   personal_access_token: $(PAT_TOKEN)
-   ```
+```yaml
+organization: contoso
+tenant_id: "12345678-1234-1234-1234-123456789012"
+client_id: "87654321-4321-4321-4321-210987654321" 
+client_secret: $(CLIENT_SECRET)
+```
+
+#### 2. Managed Identity (recommended for Azure resources)
+Use when running alert-az-do on Azure compute resources (VMs, Container Instances, AKS, etc.):
+
+```yaml
+organization: contoso
+client_id: "87654321-4321-4321-4321-210987654321"
+subscription_id: "11111111-2222-3333-4444-555555555555"
+```
+
+#### 3. Personal Access Token (simplest for development)
+Use for development or when other methods are not feasible:
+
+```yaml
+organization: contoso
+personal_access_token: $(PAT_TOKEN)
+```
+
+#### Authentication Precedence
+
+alert-az-do uses the following precedence order (highest to lowest):
+
+1. **Environment Variables** (any complete authentication method)
+   - Service Principal: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`
+   - Managed Identity: `AZURE_CLIENT_ID`, `AZURE_SUBSCRIPTION_ID`  
+   - PAT: `AZURE_PAT`
+
+2. **Configuration File** (receiver-specific settings)
+
+3. **Configuration File** (defaults section)
+
+**Important**: Authentication methods are mutually exclusive. You cannot mix Service Principal fields with Managed Identity fields or PAT tokens.
+
+#### Environment Variable Examples
+
+```bash
+# Service Principal via environment
+export AZURE_TENANT_ID="12345678-1234-1234-1234-123456789012"
+export AZURE_CLIENT_ID="87654321-4321-4321-4321-210987654321"
+export AZURE_CLIENT_SECRET="your-secret-here"
+
+# OR Managed Identity via environment  
+export AZURE_CLIENT_ID="87654321-4321-4321-4321-210987654321"
+export AZURE_SUBSCRIPTION_ID="11111111-2222-3333-4444-555555555555"
+
+# OR PAT via environment
+export AZURE_PAT="your-pat-token-here"
+```
 
 ### Example Configuration
 
 ```yaml
-# Global defaults
+# Global defaults - Service Principal authentication
 defaults:
   organization: contoso
   tenant_id: $(TENANT_ID)
-  client_id: $(CLIENT_ID)
+  client_id: $(CLIENT_ID)  
   client_secret: $(CLIENT_SECRET)
   
   issue_type: Bug
@@ -109,18 +154,54 @@ defaults:
   skip_reopen_state: "Removed"
   
 receivers:
+  # Inherits Service Principal from defaults
   - name: 'team-alpha'
     project: TeamAlpha
     add_group_labels: true
     
-  - name: 'team-beta'
+  # Uses Managed Identity authentication  
+  - name: 'team-beta-managed'
     project: TeamBeta
+    client_id: $(MI_CLIENT_ID)
+    subscription_id: $(SUBSCRIPTION_ID)
     issue_type: Task
     fields:
       System.AssignedTo: '{{ .CommonLabels.owner }}'
-      Custom.Priority: '{{ .CommonLabels.severity }}'
+      
+  # Uses PAT authentication
+  - name: 'team-gamma-pat'
+    project: TeamGamma  
+    personal_access_token: $(GAMMA_PAT)
+    issue_type: Issue
+    priority: Critical
 
 template: alert-az-do.tmpl
+```
+
+#### Alternative Example - Environment Variable Override
+
+When environment variables are set, they take precedence over config file settings:
+
+```yaml
+# Minimal config - authentication comes from environment variables
+defaults:
+  organization: contoso  # AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET set via env
+  issue_type: Bug
+  summary: '{{ template "azdo.summary" . }}'
+  reopen_state: "To Do"
+  
+receivers:
+  - name: 'alerts'
+    project: Operations
+
+template: alert-az-do.tmpl
+```
+
+```bash
+# Environment variables provide authentication
+export AZURE_TENANT_ID="12345678-1234-1234-1234-123456789012"
+export AZURE_CLIENT_ID="87654321-4321-4321-4321-210987654321"  
+export AZURE_CLIENT_SECRET="your-secret-here"
 ```
 
 ### Template Functions
@@ -152,24 +233,88 @@ receivers:
 
 ### Permissions Required
 
-The Azure AD application or Personal Access Token needs the following permissions:
+The authentication method you choose needs the following Azure DevOps permissions:
 
 - **Work Items**: Read & write
 - **Project and team**: Read (to access project information)
 
-### Creating a Personal Access Token
+### Method 1: Personal Access Token (PAT)
+
+**Best for**: Development, testing, or simple setups
 
 1. Go to Azure DevOps → User Settings → Personal Access Tokens
-2. Create a new token with "Work Items (Read & write)" scope
-3. Use the token in your configuration
+2. Create a new token with "Work Items (Read & write)" scope  
+3. Use the token in your configuration:
+   ```yaml
+   personal_access_token: $(PAT_TOKEN)
+   ```
 
-### Creating an Azure AD Application
+### Method 2: Azure AD Service Principal
+
+**Best for**: Production applications, CI/CD pipelines
 
 1. Go to Azure Portal → Azure Active Directory → App registrations
 2. Create a new application
-3. Note the Application (client) ID and Directory (tenant) ID
+3. Note the **Application (client) ID** and **Directory (tenant) ID**
 4. Create a client secret in "Certificates & secrets"
-5. Add the application to your Azure DevOps organization with appropriate permissions
+5. Add the application to your Azure DevOps organization:
+   - Go to Azure DevOps → Organization Settings → Users
+   - Add the service principal with appropriate permissions
+6. Use in configuration:
+   ```yaml
+   tenant_id: "your-tenant-id"
+   client_id: "your-client-id" 
+   client_secret: $(CLIENT_SECRET)
+   ```
+
+### Method 3: Managed Identity
+
+**Best for**: Azure compute resources (VMs, Container Instances, AKS)
+
+1. Enable managed identity on your Azure resource
+2. Note the **Client ID** of the managed identity
+3. Add the managed identity to your Azure DevOps organization:
+   - Go to Azure DevOps → Organization Settings → Users  
+   - Add the managed identity with appropriate permissions
+4. Use in configuration:
+   ```yaml
+   client_id: "your-managed-identity-client-id"
+   subscription_id: "your-azure-subscription-id"
+   ```
+
+### Container/Kubernetes Deployment
+
+For containerized deployments, use environment variables:
+
+```yaml
+# Kubernetes Secret example
+apiVersion: v1
+kind: Secret
+metadata:
+  name: alert-az-do-auth
+type: Opaque
+stringData:
+  AZURE_TENANT_ID: "12345678-1234-1234-1234-123456789012"
+  AZURE_CLIENT_ID: "87654321-4321-4321-4321-210987654321"
+  AZURE_CLIENT_SECRET: "your-secret-here"
+```
+
+```yaml
+# Deployment example
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alert-az-do
+spec:
+  template:
+    spec:
+      containers:
+      - name: alert-az-do
+        image: ghcr.io/jm-stakater/alert-az-do:latest
+        envFrom:
+        - secretRef:
+            name: alert-az-do-auth
+```
 
 ## Profiling
 
@@ -187,13 +332,92 @@ env DEBUG=1 ./alert-az-do
 
 ## Docker
 
-alert-az-do is available as a Docker image:
+alert-az-do is available as a Docker image with multiple authentication options:
 
+### Service Principal via Environment Variables
+```bash
+docker run \
+  -v $(pwd)/config:/config \
+  -p 9097:9097 \
+  -e AZURE_TENANT_ID="12345678-1234-1234-1234-123456789012" \
+  -e AZURE_CLIENT_ID="87654321-4321-4321-4321-210987654321" \
+  -e AZURE_CLIENT_SECRET="your-secret-here" \
+  ghcr.io/jm-stakater/alert-az-do:latest \
+  -config /config/alert-az-do.yml
+```
+
+### PAT via Environment Variables  
+```bash
+docker run \
+  -v $(pwd)/config:/config \
+  -p 9097:9097 \
+  -e AZURE_PAT="your-pat-token-here" \
+  ghcr.io/jm-stakater/alert-az-do:latest \
+  -config /config/alert-az-do.yml
+```
+
+### Using Config File Only
 ```bash
 docker run -v $(pwd)/config:/config \
   -p 9097:9097 \
   ghcr.io/jm-stakater/alert-az-do:latest \
   -config /config/alert-az-do.yml
+```
+
+## Troubleshooting
+
+### Authentication Issues
+
+#### "missing authentication in receiver" Error
+This error occurs when no complete authentication method is configured. Ensure you have one of:
+
+- **Service Principal**: `tenant_id`, `client_id`, and `client_secret`
+- **Managed Identity**: `client_id` and `subscription_id`  
+- **PAT**: `personal_access_token`
+
+#### "mutually exclusive" Authentication Error
+This error occurs when you mix authentication methods. Examples of invalid configurations:
+
+```yaml
+# ❌ Invalid - mixing Service Principal with PAT
+tenant_id: "..."
+client_id: "..."
+client_secret: "..."
+personal_access_token: "..."  # Cannot mix with Service Principal
+
+# ❌ Invalid - mixing Service Principal with Managed Identity  
+tenant_id: "..."
+client_id: "..."
+client_secret: "..."
+subscription_id: "..."  # Creates ambiguity between methods
+```
+
+#### Debug Authentication Method Used
+
+Enable debug logging to see which authentication method is selected:
+
+```bash
+alert-az-do -log-level debug -config config/alert-az-do.yml
+```
+
+Look for log entries showing credential selection logic.
+
+#### Environment Variable Troubleshooting
+
+Check if environment variables are set correctly:
+
+```bash
+# Check Service Principal environment variables
+echo "Tenant: $AZURE_TENANT_ID"
+echo "Client: $AZURE_CLIENT_ID"  
+echo "Secret: ${AZURE_CLIENT_SECRET:0:4}..."  # Only show first 4 chars
+
+# Check Managed Identity environment variables
+echo "Client: $AZURE_CLIENT_ID"
+echo "Subscription: $AZURE_SUBSCRIPTION_ID"
+
+# Check PAT environment variable
+echo "PAT: ${AZURE_PAT:0:4}..."  # Only show first 4 chars
 ```
 
 ## Contributing

@@ -5,6 +5,7 @@ defaults:
   organization: contoso
   tenant_id: alert-az-do
   client_id: alert-az-do
+  subscription_id: alert-az-do
   # Get password from the $PASSWORD environment variable.
   client_secret: $(PASSWORD)
   # Alternatively to user and password use a Personal Access Token

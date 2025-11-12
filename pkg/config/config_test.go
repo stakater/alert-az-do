@@ -32,6 +32,7 @@ defaults:
   organization: my_test_org
   tenant_id: alert-az-do
   client_id: alert-az-do
+  subscription_id: alert-az-do
   client_secret: 'alert-az-do'
 
   # The type of Azure DevOps work item to create. Required.
@@ -94,7 +95,6 @@ func TestLoadFile(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, testConf, string(content))
-
 }
 
 // Checks if the env var substitution is happening correctly in the loaded file
@@ -119,6 +119,7 @@ type receiverTestConfig struct {
 	Organization        string `yaml:"organization,omitempty"`
 	TenantID            string `yaml:"tenant_id,omitempty"`
 	ClientID            string `yaml:"client_id,omitempty"`
+	SubscriptionID      string `yaml:"subscription_id,omitempty"`
 	ClientSecret        string `yaml:"client_secret,omitempty"`
 	PersonalAccessToken string `yaml:"personal_access_token,omitempty"`
 	Project             string `yaml:"project,omitempty"`
@@ -204,46 +205,64 @@ func TestRequiredReceiverConfigKeys(t *testing.T) {
 
 // Auth keys error scenarios.
 func TestAuthKeysErrors(t *testing.T) {
-	mandatory := mandatoryReceiverFields()
+	servicePrincipal := mandatoryReceiverFields()
+	managedIdentity := mandatoryManagedIdentityFields()
+	pat := mandatoryPATFields()
 	minimalReceiverTestConfig := newReceiverTestConfig([]string{"Name"}, []string{})
 
-	// Test cases:
-	// * missing user.
-	// * missing password.
-	// * specifying user and PAT auth.
-	// * specifying password and PAT auth.
-	// * specifying user, password and PAT auth.
+	// Test cases for Service Principal authentication:
+	// * missing TenantID, ClientID, or ClientSecret
+	// * Service Principal + PAT conflicts
+	// Test cases for Managed Identity authentication:
+	// * missing ClientID or SubscriptionID
+	// * Managed Identity + PAT conflicts
+	// Test cases for PAT authentication:
+	// * missing PersonalAccessToken
 	for _, test := range []struct {
 		receiverTestConfigMandatoryFields []string
 		errorMessage                      string
 	}{
+		// Service Principal incomplete scenarios
 		{
-			removeFromStrSlice(mandatory, "TenantID"),
+			removeFromStrSlice(servicePrincipal, "TenantID"),
 			`missing authentication in receiver "Name"`,
 		},
 		{
-			removeFromStrSlice(mandatory, "ClientID"),
+			removeFromStrSlice(servicePrincipal, "ClientID"),
 			`missing authentication in receiver "Name"`,
 		},
 		{
-			removeFromStrSlice(mandatory, "ClientSecret"),
+			removeFromStrSlice(servicePrincipal, "ClientSecret"),
+			`missing authentication in receiver "Name"`,
+		},
+		// Managed Identity incomplete scenarios
+		{
+			removeFromStrSlice(managedIdentity, "ClientID"),
 			`missing authentication in receiver "Name"`,
 		},
 		{
-			append(removeFromStrSlice(mandatory, "TenantID"), "PersonalAccessToken"),
-			"TenantID/ClientID/ClientSecret and PAT authentication are mutually exclusive",
+			removeFromStrSlice(managedIdentity, "SubscriptionID"),
+			`missing authentication in receiver "Name"`,
 		},
+		// PAT incomplete scenarios
 		{
-			append(removeFromStrSlice(mandatory, "ClientID"), "PersonalAccessToken"),
-			"TenantID/ClientID/ClientSecret and PAT authentication are mutually exclusive",
+			removeFromStrSlice(pat, "PersonalAccessToken"),
+			`missing authentication in receiver "Name"`,
 		},
+		// Mutual exclusivity scenarios - Service Principal + PAT
 		{
-			append(removeFromStrSlice(mandatory, "ClientSecret"), "PersonalAccessToken"),
-			"TenantID/ClientID/ClientSecret and PAT authentication are mutually exclusive",
+			append(servicePrincipal, "PersonalAccessToken"),
+			"Service Principal (TenantID+ClientID+ClientSecret), Managed Identity (ClientID+SubscriptionID), and PAT authentication are mutually exclusive",
 		},
+		// Mutual exclusivity scenarios - Managed Identity + PAT
 		{
-			append(mandatory, "PersonalAccessToken"),
-			"TenantID/ClientID/ClientSecret and PAT authentication are mutually exclusive",
+			append(managedIdentity, "PersonalAccessToken"),
+			"Service Principal (TenantID+ClientID+ClientSecret), Managed Identity (ClientID+SubscriptionID), and PAT authentication are mutually exclusive",
+		},
+		// Mutual exclusivity scenarios - Service Principal + Managed Identity + PAT
+		{
+			append(append(servicePrincipal, "SubscriptionID"), "PersonalAccessToken"),
+			"Service Principal (TenantID+ClientID+ClientSecret), Managed Identity (ClientID+SubscriptionID), and PAT authentication are mutually exclusive",
 		},
 	} {
 
@@ -260,10 +279,11 @@ func TestAuthKeysErrors(t *testing.T) {
 
 // These tests want to make sure that receiver auth always overrides defaults auth.
 func TestAuthKeysOverrides(t *testing.T) {
-	defaultsWithUserPassword := mandatoryReceiverFields()
+	defaultsWithServicePrincipal := mandatoryReceiverFields()       // TenantID + ClientID + ClientSecret
+	defaultsWithManagedIdentity := mandatoryManagedIdentityFields() // ClientID + SubscriptionID
 
 	defaultsWithPAT := []string{"PersonalAccessToken"}
-	for _, field := range defaultsWithUserPassword {
+	for _, field := range defaultsWithServicePrincipal {
 		if field == "TenantID" || field == "ClientID" || field == "ClientSecret" {
 			continue
 		}
@@ -274,28 +294,33 @@ func TestAuthKeysOverrides(t *testing.T) {
 	// * tenantId receiver overrides tenantId default.
 	// * clientId receiver overrides clientId default.
 	// * clientSecret receiver overrides clientSecret default.
+	// * subscriptionId receiver overrides subscriptionId default (for managed identity).
 	// * tenantId, clientId & clientSecret receiver overrides tenantId, clientId & clientSecret default.
-	// * PAT receiver overrides tenantId, clientId & clientSecret default.
+	// * clientId & subscriptionId receiver overrides clientId & subscriptionId default (managed identity).
+	// * PAT receiver overrides service principal default.
 	// * PAT receiver overrides PAT default.
-	// * tenantId, clientId & clientSecret receiver overrides PAT default.
+	// * service principal receiver overrides PAT default.
 	for _, test := range []struct {
-		tenantIdOverrideValue     string
-		clientIdOverrideValue     string
-		clientSecretOverrideValue string
-		patOverrideValue          string // Personal Access Token override.
-		tenantIdExpectedValue     string
-		clientIdExpectedValue     string
-		clientSecretExpectedValue string
-		patExpectedValue          string
-		defaultFields             []string // Fields to build the config defaults.
+		tenantIdOverrideValue       string
+		clientIdOverrideValue       string
+		subscriptionIdOverrideValue string
+		clientSecretOverrideValue   string
+		patOverrideValue            string // Personal Access Token override.
+		tenantIdExpectedValue       string
+		clientIdExpectedValue       string
+		subscriptionIdExpectedValue string
+		clientSecretExpectedValue   string
+		patExpectedValue            string
+		defaultFields               []string // Fields to build the config defaults.
 	}{
-		{"tenantId", "", "", "", "tenantId", "ClientID", "ClientSecret", "", defaultsWithUserPassword},
-		{"", "clientId", "", "", "TenantID", "clientId", "ClientSecret", "", defaultsWithUserPassword},
-		{"", "", "clientSecret", "", "TenantID", "ClientID", "clientSecret", "", defaultsWithUserPassword},
-		{"tenantId", "clientId", "clientSecret", "", "tenantId", "clientId", "clientSecret", "", defaultsWithUserPassword},
-		{"", "", "", "azurePAT", "", "", "", "azurePAT", defaultsWithUserPassword},
-		{"", "", "", "", "", "", "", "PersonalAccessToken", defaultsWithPAT},
-		{"", "", "", "azurePAT", "", "", "", "azurePAT", defaultsWithPAT},
+		{"tenantId", "", "", "", "", "tenantId", "ClientID", "", "ClientSecret", "", defaultsWithServicePrincipal},
+		{"", "clientId", "", "", "", "TenantID", "clientId", "", "ClientSecret", "", defaultsWithServicePrincipal},
+		{"", "", "", "clientSecret", "", "TenantID", "ClientID", "", "clientSecret", "", defaultsWithServicePrincipal},
+		{"", "clientId", "subscriptionId", "", "", "", "clientId", "subscriptionId", "", "", defaultsWithManagedIdentity},
+		{"tenantId", "clientId", "", "clientSecret", "", "tenantId", "clientId", "", "clientSecret", "", defaultsWithServicePrincipal},
+		{"", "", "", "", "azurePAT", "", "", "", "", "azurePAT", defaultsWithServicePrincipal},
+		{"", "", "", "", "", "", "", "", "", "PersonalAccessToken", defaultsWithPAT},
+		{"", "", "", "", "azurePAT", "", "", "", "", "azurePAT", defaultsWithPAT},
 	} {
 		defaultsConfig := newReceiverTestConfig(test.defaultFields, []string{})
 		receiverConfig := newReceiverTestConfig([]string{"Name"}, []string{})
@@ -304,6 +329,9 @@ func TestAuthKeysOverrides(t *testing.T) {
 		}
 		if test.clientIdOverrideValue != "" {
 			receiverConfig.ClientID = test.clientIdOverrideValue
+		}
+		if test.subscriptionIdOverrideValue != "" {
+			receiverConfig.SubscriptionID = test.subscriptionIdOverrideValue
 		}
 		if test.clientSecretOverrideValue != "" {
 			receiverConfig.ClientSecret = test.clientSecretOverrideValue
@@ -327,6 +355,7 @@ func TestAuthKeysOverrides(t *testing.T) {
 		receiver := cfg.Receivers[0]
 		require.Equal(t, test.tenantIdExpectedValue, receiver.TenantID)
 		require.Equal(t, test.clientIdExpectedValue, receiver.ClientID)
+		require.Equal(t, test.subscriptionIdExpectedValue, receiver.SubscriptionID)
 		require.Equal(t, Secret(test.clientSecretExpectedValue), receiver.ClientSecret)
 		require.Equal(t, Secret(test.patExpectedValue), receiver.PersonalAccessToken)
 	}
@@ -458,8 +487,8 @@ func removeFromStrSlice(strSlice []string, element string) []string {
 	return newStrSlice
 }
 
-// Returns mandatory receiver fields to be used creating test config structs.
-// It does not include PAT auth, those tests will be created separately.
+// Returns mandatory receiver fields for Service Principal authentication to be used creating test config structs.
+// Service Principal requires: TenantID + ClientID + ClientSecret (not SubscriptionID).
 func mandatoryReceiverFields() []string {
 	return []string{
 		"Name",
@@ -467,6 +496,37 @@ func mandatoryReceiverFields() []string {
 		"TenantID",
 		"ClientID",
 		"ClientSecret",
+		"Project",
+		"IssueType",
+		"Summary",
+		"ReopenState",
+		"ReopenDuration",
+	}
+}
+
+// Returns mandatory receiver fields for Managed Identity authentication.
+// Managed Identity requires: ClientID + SubscriptionID (no secrets).
+func mandatoryManagedIdentityFields() []string {
+	return []string{
+		"Name",
+		"Organization",
+		"ClientID",
+		"SubscriptionID",
+		"Project",
+		"IssueType",
+		"Summary",
+		"ReopenState",
+		"ReopenDuration",
+	}
+}
+
+// Returns mandatory receiver fields for PAT authentication.
+// PAT requires: only PersonalAccessToken.
+func mandatoryPATFields() []string {
+	return []string{
+		"Name",
+		"Organization",
+		"PersonalAccessToken",
 		"Project",
 		"IssueType",
 		"Summary",
@@ -557,6 +617,7 @@ func TestEnvironmentVariableCredentialPrecedence(t *testing.T) {
 	// Save original environment values
 	originalTenantID := os.Getenv("AZURE_TENANT_ID")
 	originalClientID := os.Getenv("AZURE_CLIENT_ID")
+	originalSubscriptionID := os.Getenv("AZURE_SUBSCRIPTION_ID")
 	originalClientSecret := os.Getenv("AZURE_CLIENT_SECRET")
 	originalPAT := os.Getenv("AZURE_PAT")
 
@@ -564,14 +625,17 @@ func TestEnvironmentVariableCredentialPrecedence(t *testing.T) {
 	defer func() {
 		require.NoError(t, os.Setenv("AZURE_TENANT_ID", originalTenantID))
 		require.NoError(t, os.Setenv("AZURE_CLIENT_ID", originalClientID))
+		require.NoError(t, os.Setenv("AZURE_SUBSCRIPTION_ID", originalSubscriptionID))
 		require.NoError(t, os.Setenv("AZURE_CLIENT_SECRET", originalClientSecret))
 		require.NoError(t, os.Setenv("AZURE_PAT", originalPAT))
 	}()
 
 	// Test cases:
 	// * Environment service principal variables should take precedence over config
+	// * Environment managed identity should take precedence over config service principal
 	// * Environment PAT should take precedence over config service principal
 	// * Config service principal should be used when no env vars are set
+	// * Config managed identity should be used when no env vars are set
 	// * Config PAT should be used when no env vars or service principal config
 	// * Partial environment service principal should fall back to config
 	// * Environment PAT should be used even with partial service principal env vars
@@ -579,20 +643,24 @@ func TestEnvironmentVariableCredentialPrecedence(t *testing.T) {
 		name                   string
 		envTenantID            string
 		envClientID            string
+		envSubscriptionID      string
 		envClientSecret        string
 		envPAT                 string
 		configTenantID         string
 		configClientID         string
+		configSubscriptionID   string
 		configClientSecret     string
 		configPAT              string
 		expectedCredentialType string
 	}{
-		{"environment_service_principal_takes_precedence", "env-tenant-id", "env-client-id", "env-client-secret", "", "config-tenant-id", "config-client-id", "config-client-secret", "", "environment_service_principal"},
-		{"environment_pat_takes_precedence", "", "", "", "env-pat-token", "config-tenant-id", "config-client-id", "config-client-secret", "", "environment_pat"},
-		{"config_service_principal_fallback", "", "", "", "", "config-tenant-id", "config-client-id", "config-client-secret", "", "config_service_principal"},
-		{"config_pat_fallback", "", "", "", "", "", "", "", "config-pat-token", "config_pat"},
-		{"environment_service_principal_partial_ignored", "env-tenant-id", "", "env-client-secret", "", "config-tenant-id", "config-client-id", "config-client-secret", "", "config_service_principal"}, // Missing client ID
-		{"environment_pat_beats_partial_service_principal", "env-tenant-id", "", "", "env-pat-token", "config-tenant-id", "config-client-id", "config-client-secret", "", "environment_pat"},            // Only partial service principal
+		{"environment_service_principal_takes_precedence", "env-tenant-id", "env-client-id", "", "env-client-secret", "", "config-tenant-id", "config-client-id", "config-subscription-id", "config-client-secret", "", "environment_service_principal"},
+		{"environment_managed_identity_takes_precedence", "", "env-client-id", "env-subscription-id", "", "", "config-tenant-id", "config-client-id", "", "config-client-secret", "", "environment_managed_identity"},
+		{"environment_pat_takes_precedence", "", "", "", "", "env-pat-token", "config-tenant-id", "config-client-id", "", "config-client-secret", "", "environment_pat"},
+		{"config_service_principal_fallback", "", "", "", "", "", "config-tenant-id", "config-client-id", "", "config-client-secret", "", "config_service_principal"},
+		{"config_managed_identity_fallback", "", "", "", "", "", "", "config-client-id", "config-subscription-id", "", "", "config_managed_identity"},
+		{"config_pat_fallback", "", "", "", "", "", "", "", "", "", "config-pat-token", "config_pat"},
+		{"environment_service_principal_partial_ignored", "env-tenant-id", "", "", "env-client-secret", "", "config-tenant-id", "config-client-id", "", "config-client-secret", "", "config_service_principal"}, // Missing client ID
+		{"environment_pat_beats_partial_service_principal", "env-tenant-id", "", "", "", "env-pat-token", "config-tenant-id", "config-client-id", "", "config-client-secret", "", "environment_pat"},            // Only partial service principal
 	}
 
 	for _, tt := range tests {
@@ -600,6 +668,7 @@ func TestEnvironmentVariableCredentialPrecedence(t *testing.T) {
 			// Set environment variables
 			require.NoError(t, os.Setenv("AZURE_TENANT_ID", tt.envTenantID))
 			require.NoError(t, os.Setenv("AZURE_CLIENT_ID", tt.envClientID))
+			require.NoError(t, os.Setenv("AZURE_SUBSCRIPTION_ID", tt.envSubscriptionID))
 			require.NoError(t, os.Setenv("AZURE_CLIENT_SECRET", tt.envClientSecret))
 			require.NoError(t, os.Setenv("AZURE_PAT", tt.envPAT))
 
@@ -623,6 +692,9 @@ func TestEnvironmentVariableCredentialPrecedence(t *testing.T) {
 			}
 			if tt.configClientID != "" {
 				receiverConfig.ClientID = tt.configClientID
+			}
+			if tt.configSubscriptionID != "" {
+				receiverConfig.SubscriptionID = tt.configSubscriptionID
 			}
 			if tt.configClientSecret != "" {
 				receiverConfig.ClientSecret = tt.configClientSecret
@@ -649,10 +721,14 @@ func TestEnvironmentVariableCredentialPrecedence(t *testing.T) {
 			var actualCredentialType string
 			if os.Getenv("AZURE_TENANT_ID") != "" && os.Getenv("AZURE_CLIENT_ID") != "" && os.Getenv("AZURE_CLIENT_SECRET") != "" {
 				actualCredentialType = "environment_service_principal"
+			} else if os.Getenv("AZURE_CLIENT_ID") != "" && os.Getenv("AZURE_SUBSCRIPTION_ID") != "" {
+				actualCredentialType = "environment_managed_identity"
 			} else if os.Getenv("AZURE_PAT") != "" {
 				actualCredentialType = "environment_pat"
 			} else if receiver.TenantID != "" && receiver.ClientID != "" && receiver.ClientSecret != "" {
 				actualCredentialType = "config_service_principal"
+			} else if receiver.ClientID != "" && receiver.SubscriptionID != "" {
+				actualCredentialType = "config_managed_identity"
 			} else if receiver.PersonalAccessToken != "" {
 				actualCredentialType = "config_pat"
 			} else {
@@ -670,12 +746,14 @@ func TestEnvironmentVariableSubstitutionInCredentials(t *testing.T) {
 	// Set up environment variables for substitution
 	require.NoError(t, os.Setenv("TEST_TENANT_ID", "substituted-tenant-id"))
 	require.NoError(t, os.Setenv("TEST_CLIENT_ID", "substituted-client-id"))
+	require.NoError(t, os.Setenv("TEST_SUBSCRIPTION_ID", "substituted-subscription-id"))
 	require.NoError(t, os.Setenv("TEST_CLIENT_SECRET", "substituted-client-secret"))
 	require.NoError(t, os.Setenv("TEST_PAT", "substituted-pat-token"))
 
 	defer func() {
 		require.NoError(t, os.Unsetenv("TEST_TENANT_ID"))
 		require.NoError(t, os.Unsetenv("TEST_CLIENT_ID"))
+		require.NoError(t, os.Unsetenv("TEST_SUBSCRIPTION_ID"))
 		require.NoError(t, os.Unsetenv("TEST_CLIENT_SECRET"))
 		require.NoError(t, os.Unsetenv("TEST_PAT"))
 	}()
@@ -685,6 +763,7 @@ defaults:
   organization: test-org
   tenant_id: $(TEST_TENANT_ID)
   client_id: $(TEST_CLIENT_ID)
+  subscription_id: $(TEST_SUBSCRIPTION_ID)
   client_secret: $(TEST_CLIENT_SECRET)
   issue_type: Bug
   summary: 'Test summary'
@@ -709,6 +788,7 @@ template: alert-az-do.tmpl
 	// Check that defaults got substituted
 	require.Equal(t, "substituted-tenant-id", cfg.Defaults.TenantID)
 	require.Equal(t, "substituted-client-id", cfg.Defaults.ClientID)
+	require.Equal(t, "substituted-subscription-id", cfg.Defaults.SubscriptionID)
 	require.Equal(t, Secret("substituted-client-secret"), cfg.Defaults.ClientSecret)
 
 	// Check that receiver got substituted

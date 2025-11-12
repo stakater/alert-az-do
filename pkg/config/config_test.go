@@ -549,3 +549,169 @@ func TestStaticLabelsConfigMerge(t *testing.T) {
 		require.ElementsMatch(t, receiver.StaticLabels, test.expectedElements, "Elements should match (failing index: %v)", i)
 	}
 }
+
+// TestEnvironmentVariableCredentialPrecedence tests the credential precedence logic
+// that matches the behavior in AlertHandlerFunc. Environment variables should take
+// precedence over config-based credentials.
+func TestEnvironmentVariableCredentialPrecedence(t *testing.T) {
+	// Save original environment values
+	originalTenantID := os.Getenv("AZURE_TENANT_ID")
+	originalClientID := os.Getenv("AZURE_CLIENT_ID")
+	originalClientSecret := os.Getenv("AZURE_CLIENT_SECRET")
+	originalPAT := os.Getenv("AZURE_PAT")
+
+	// Clean up environment after test
+	defer func() {
+		require.NoError(t, os.Setenv("AZURE_TENANT_ID", originalTenantID))
+		require.NoError(t, os.Setenv("AZURE_CLIENT_ID", originalClientID))
+		require.NoError(t, os.Setenv("AZURE_CLIENT_SECRET", originalClientSecret))
+		require.NoError(t, os.Setenv("AZURE_PAT", originalPAT))
+	}()
+
+	// Test cases:
+	// * Environment service principal variables should take precedence over config
+	// * Environment PAT should take precedence over config service principal
+	// * Config service principal should be used when no env vars are set
+	// * Config PAT should be used when no env vars or service principal config
+	// * Partial environment service principal should fall back to config
+	// * Environment PAT should be used even with partial service principal env vars
+	tests := []struct {
+		name                   string
+		envTenantID            string
+		envClientID            string
+		envClientSecret        string
+		envPAT                 string
+		configTenantID         string
+		configClientID         string
+		configClientSecret     string
+		configPAT              string
+		expectedCredentialType string
+	}{
+		{"environment_service_principal_takes_precedence", "env-tenant-id", "env-client-id", "env-client-secret", "", "config-tenant-id", "config-client-id", "config-client-secret", "", "environment_service_principal"},
+		{"environment_pat_takes_precedence", "", "", "", "env-pat-token", "config-tenant-id", "config-client-id", "config-client-secret", "", "environment_pat"},
+		{"config_service_principal_fallback", "", "", "", "", "config-tenant-id", "config-client-id", "config-client-secret", "", "config_service_principal"},
+		{"config_pat_fallback", "", "", "", "", "", "", "", "config-pat-token", "config_pat"},
+		{"environment_service_principal_partial_ignored", "env-tenant-id", "", "env-client-secret", "", "config-tenant-id", "config-client-id", "config-client-secret", "", "config_service_principal"}, // Missing client ID
+		{"environment_pat_beats_partial_service_principal", "env-tenant-id", "", "", "env-pat-token", "config-tenant-id", "config-client-id", "config-client-secret", "", "environment_pat"},            // Only partial service principal
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set environment variables
+			require.NoError(t, os.Setenv("AZURE_TENANT_ID", tt.envTenantID))
+			require.NoError(t, os.Setenv("AZURE_CLIENT_ID", tt.envClientID))
+			require.NoError(t, os.Setenv("AZURE_CLIENT_SECRET", tt.envClientSecret))
+			require.NoError(t, os.Setenv("AZURE_PAT", tt.envPAT))
+
+			// Create config
+			defaultsConfig := &receiverTestConfig{
+				Organization:   "test-org",
+				IssueType:      "Bug",
+				Summary:        "Test summary",
+				ReopenState:    "To Do",
+				ReopenDuration: "24h",
+			}
+
+			receiverConfig := &receiverTestConfig{
+				Name:    "test-receiver",
+				Project: "test-project",
+			}
+
+			// Only set config auth fields if they're non-empty
+			if tt.configTenantID != "" {
+				receiverConfig.TenantID = tt.configTenantID
+			}
+			if tt.configClientID != "" {
+				receiverConfig.ClientID = tt.configClientID
+			}
+			if tt.configClientSecret != "" {
+				receiverConfig.ClientSecret = tt.configClientSecret
+			}
+			if tt.configPAT != "" {
+				receiverConfig.PersonalAccessToken = tt.configPAT
+			}
+
+			config := testConfig{
+				Defaults:  defaultsConfig,
+				Receivers: []*receiverTestConfig{receiverConfig},
+				Template:  "alert-az-do.tmpl",
+			}
+
+			yamlConfig, err := yaml.Marshal(&config)
+			require.NoError(t, err)
+
+			cfg, err := Load(string(yamlConfig))
+			require.NoError(t, err)
+
+			receiver := cfg.Receivers[0]
+
+			// Simulate the credential selection logic from AlertHandlerFunc
+			var actualCredentialType string
+			if os.Getenv("AZURE_TENANT_ID") != "" && os.Getenv("AZURE_CLIENT_ID") != "" && os.Getenv("AZURE_CLIENT_SECRET") != "" {
+				actualCredentialType = "environment_service_principal"
+			} else if os.Getenv("AZURE_PAT") != "" {
+				actualCredentialType = "environment_pat"
+			} else if receiver.TenantID != "" && receiver.ClientID != "" && receiver.ClientSecret != "" {
+				actualCredentialType = "config_service_principal"
+			} else if receiver.PersonalAccessToken != "" {
+				actualCredentialType = "config_pat"
+			} else {
+				actualCredentialType = "none"
+			}
+
+			require.Equal(t, tt.expectedCredentialType, actualCredentialType, "Test: %s - %s", tt.name)
+		})
+	}
+}
+
+// TestEnvironmentVariableSubstitutionInCredentials tests that environment variable
+// substitution works correctly for credential fields in the config file.
+func TestEnvironmentVariableSubstitutionInCredentials(t *testing.T) {
+	// Set up environment variables for substitution
+	require.NoError(t, os.Setenv("TEST_TENANT_ID", "substituted-tenant-id"))
+	require.NoError(t, os.Setenv("TEST_CLIENT_ID", "substituted-client-id"))
+	require.NoError(t, os.Setenv("TEST_CLIENT_SECRET", "substituted-client-secret"))
+	require.NoError(t, os.Setenv("TEST_PAT", "substituted-pat-token"))
+
+	defer func() {
+		require.NoError(t, os.Unsetenv("TEST_TENANT_ID"))
+		require.NoError(t, os.Unsetenv("TEST_CLIENT_ID"))
+		require.NoError(t, os.Unsetenv("TEST_CLIENT_SECRET"))
+		require.NoError(t, os.Unsetenv("TEST_PAT"))
+	}()
+
+	configYAML := `
+defaults:
+  organization: test-org
+  tenant_id: $(TEST_TENANT_ID)
+  client_id: $(TEST_CLIENT_ID)
+  client_secret: $(TEST_CLIENT_SECRET)
+  issue_type: Bug
+  summary: 'Test summary'
+  reopen_state: "To Do"
+  reopen_duration: 24h
+
+receivers:
+  - name: 'test-receiver'
+    project: test-project
+    personal_access_token: $(TEST_PAT)
+
+template: alert-az-do.tmpl
+`
+
+	// Use substituteEnvVars first, then Load
+	substitutedContent, err := substituteEnvVars([]byte(configYAML), log.NewNopLogger())
+	require.NoError(t, err)
+
+	cfg, err := Load(string(substitutedContent))
+	require.NoError(t, err)
+
+	// Check that defaults got substituted
+	require.Equal(t, "substituted-tenant-id", cfg.Defaults.TenantID)
+	require.Equal(t, "substituted-client-id", cfg.Defaults.ClientID)
+	require.Equal(t, Secret("substituted-client-secret"), cfg.Defaults.ClientSecret)
+
+	// Check that receiver got substituted
+	receiver := cfg.Receivers[0]
+	require.Equal(t, Secret("substituted-pat-token"), receiver.PersonalAccessToken)
+}

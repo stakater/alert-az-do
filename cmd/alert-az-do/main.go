@@ -47,8 +47,6 @@ var (
 	configFile    = flag.String("config", "config/alert-az-do.yml", "The alert-az-do configuration file")
 	logLevel      = flag.String("log.level", "info", "Log filtering level (debug, info, warn, error)")
 	logFormat     = flag.String("log.format", logFormatLogfmt, "Log format to use ("+logFormatLogfmt+", "+logFormatJSON+")")
-	hashJiraLabel = flag.Bool("hash-jira-label", false, "if enabled: renames ALERT{...} to alert-az-do{...}; also hashes the key-value pairs inside of alert-az-do{...} in the created jira issue labels"+
-		"- this ensures that the label text does not overflow the allowed length in jira (255)")
 	//updateSummary        = flag.Bool("update-summary", true, "When false, alert-az-do does not update the summary of the existing jira issue, even when changes are spotted.")
 	//updateDescription    = flag.Bool("update-description", true, "When false, alert-az-do does not update the description of the existing jira issue, even when changes are spotted.")
 	//reopenTickets        = flag.Bool("reopen-tickets", true, "When false, alert-az-do does not reopen tickets.")
@@ -68,12 +66,6 @@ func main() {
 
 	var logger = setupLogger(*logLevel, *logFormat)
 	level.Info(logger).Log("msg", "starting alert-az-do", "version", Version)
-
-	if !*hashJiraLabel {
-		level.Warn(logger).Log("msg", "Using deprecated jira label generation - "+
-			"please read https://github.com/jm-stakater/alert-az-do/pull/79 "+
-			"and try -hash-jira-label")
-	}
 
 	config, _, err := config.LoadFile(*configFile, logger)
 	if err != nil {

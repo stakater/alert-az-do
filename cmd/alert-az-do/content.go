@@ -174,8 +174,10 @@ func AlertHandlerFunc(ctx context.Context, logger log.Logger, config *config.Con
 		//var client azcore.Client
 		var cred azcore.TokenCredential
 		var err error
-		if os.Getenv("AZURE_TENANT_ID") != "" && os.Getenv("AZURE_CLIENT_ID") != "" && conf.ClientSecret != "" {
+		if os.Getenv("AZURE_TENANT_ID") != "" && os.Getenv("AZURE_CLIENT_ID") != "" && os.Getenv("AZURE_CLIENT_SECRET") != "" {
 			cred, err = azidentity.NewEnvironmentCredential(nil)
+		} else if pat := os.Getenv("AZURE_PAT"); pat != "" {
+			cred, err = azidentity.NewUsernamePasswordCredential("", "", "", pat, nil)
 		} else if conf.TenantID != "" && conf.ClientID != "" && conf.ClientSecret != "" {
 			cred, err = azidentity.NewClientSecretCredential(string(conf.TenantID), string(conf.ClientID), string(conf.ClientSecret), nil)
 		} else if conf.PersonalAccessToken != "" {

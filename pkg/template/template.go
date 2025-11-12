@@ -16,6 +16,8 @@ package template
 
 import (
 	"bytes"
+	"encoding/json"
+	html "html/template"
 	"os"
 	"regexp"
 	"strings"
@@ -51,6 +53,10 @@ var funcs = template.FuncMap{
 	},
 	"getEnv": func(name string) string {
 		return os.Getenv(name)
+	},
+	"marshal": func(v interface{}) html.JS {
+		a, _ := json.Marshal(v)
+		return html.JS(a)
 	},
 }
 

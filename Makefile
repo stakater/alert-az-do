@@ -1,4 +1,4 @@
-DOCKER_REPO             ?= quay.io/alert-az-do
+DOCKER_REPO             ?= ghcr.io/alert-az-do
 DOCKER_IMAGE_NAME       ?= alert-az-do
 
 

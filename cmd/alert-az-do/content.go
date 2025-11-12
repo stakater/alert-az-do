@@ -172,7 +172,7 @@ func AlertHandlerFunc(ctx context.Context, logger log.Logger, config *config.Con
 		// Azure credential selection with proper authentication patterns
 		var cred azcore.TokenCredential
 		var err error
-		
+
 		// Environment variables take precedence (Service Principal pattern)
 		if os.Getenv("AZURE_TENANT_ID") != "" && os.Getenv("AZURE_CLIENT_ID") != "" && os.Getenv("AZURE_CLIENT_SECRET") != "" {
 			cred, err = azidentity.NewEnvironmentCredential(nil)

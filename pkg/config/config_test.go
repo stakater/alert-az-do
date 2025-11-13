@@ -109,8 +109,10 @@ func TestEnvSubstitution(t *testing.T) {
 	require.Equal(t, string(content), expected)
 
 	config = "user: $(JA_MISSING)"
-	_, err = substituteEnvVars([]byte(config), log.NewNopLogger())
-	require.Error(t, err)
+	content, err = substituteEnvVars([]byte(config), log.NewNopLogger())
+	expected = "user: " // Missing env var results in empty string, not error
+	require.NoError(t, err)
+	require.Equal(t, string(content), expected)
 }
 
 // A test version of the ReceiverConfig struct to create test yaml fixtures.

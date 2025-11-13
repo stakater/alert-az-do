@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-	"os"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -173,27 +172,16 @@ func AlertHandlerFunc(ctx context.Context, logger log.Logger, config *config.Con
 		var cred azcore.TokenCredential
 		var err error
 
-		// Environment variables take precedence (Service Principal pattern)
-		if os.Getenv("AZURE_TENANT_ID") != "" && os.Getenv("AZURE_CLIENT_ID") != "" && os.Getenv("AZURE_CLIENT_SECRET") != "" {
-			cred, err = azidentity.NewEnvironmentCredential(nil)
-		} else if os.Getenv("AZURE_CLIENT_ID") != "" && os.Getenv("AZURE_SUBSCRIPTION_ID") != "" {
-			// Environment Managed Identity pattern (ClientID + SubscriptionID)
-			cred, err = azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
-				ID: azidentity.ClientID(os.Getenv("AZURE_CLIENT_ID")),
-			})
-		} else if pat := os.Getenv("AZURE_PAT"); pat != "" {
-			// Environment PAT authentication
-			cred, err = azidentity.NewUsernamePasswordCredential("", "", "", pat, nil)
-		} else if conf.TenantID != "" && conf.ClientID != "" && conf.ClientSecret != "" {
-			// Config Service Principal authentication (TenantID + ClientID + ClientSecret)
+		if conf.TenantID != "" && conf.ClientID != "" && conf.ClientSecret != "" {
+			// Service Principal authentication (TenantID + ClientID + ClientSecret)
 			cred, err = azidentity.NewClientSecretCredential(string(conf.TenantID), string(conf.ClientID), string(conf.ClientSecret), nil)
 		} else if conf.ClientID != "" && conf.SubscriptionID != "" {
-			// Config Managed Identity authentication (ClientID + SubscriptionID)
+			// Managed Identity authentication (ClientID + SubscriptionID)
 			cred, err = azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{
 				ID: azidentity.ClientID(string(conf.ClientID)),
 			})
 		} else if conf.PersonalAccessToken != "" {
-			// Config PAT authentication
+			// Personal Access Token (PAT) authentication
 			cred, err = azidentity.NewUsernamePasswordCredential("", "", "", string(conf.PersonalAccessToken), nil)
 		} else {
 			err = fmt.Errorf("no valid authentication method configured")

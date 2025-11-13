@@ -91,9 +91,8 @@ func substituteEnvVars(b []byte, logger log.Logger) (r []byte, err error) {
 
 		v, ok := os.LookupEnv(string(n))
 		if !ok {
-			err = fmt.Errorf("missing env variable: %q", n)
-			level.Error(logger).Log("msg", "env variable substitution error", "err", err)
-			return nil
+			level.Warn(logger).Log("msg", "missing environment variable, using empty value", "var", string(n))
+			return []byte("") // Continue with empty string instead of failing
 		}
 		return []byte(v)
 	})

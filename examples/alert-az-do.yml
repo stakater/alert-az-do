@@ -57,8 +57,8 @@ receivers:
     # Azure DevOps project to create the issue in. Required.
     project: AB
     # Use receiver specific API access fields.
-    #client_id: $(AZURE_CLIENT_ID)
-    #client_secret: $(AZURE_CLIENT_SECRET)
+    client_id: $(AZURE_CLIENT_ID)
+    client_secret: $(AZURE_CLIENT_SECRET)
 
     # Copy all Prometheus labels into separate Azure DevOps labels. Optional (default: false).
     add_group_labels: false

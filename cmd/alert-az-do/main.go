@@ -47,11 +47,11 @@ var (
 	configFile    = flag.String("config", "config/alert-az-do.yml", "The alert-az-do configuration file")
 	logLevel      = flag.String("log.level", "info", "Log filtering level (debug, info, warn, error)")
 	logFormat     = flag.String("log.format", logFormatLogfmt, "Log format to use ("+logFormatLogfmt+", "+logFormatJSON+")")
-	//updateSummary        = flag.Bool("update-summary", true, "When false, alert-az-do does not update the summary of the existing jira issue, even when changes are spotted.")
-	//updateDescription    = flag.Bool("update-description", true, "When false, alert-az-do does not update the description of the existing jira issue, even when changes are spotted.")
+	//updateSummary        = flag.Bool("update-summary", true, "When false, alert-az-do does not update the summary of the existing work item, even when changes are spotted.")
+	//updateDescription    = flag.Bool("update-description", true, "When false, alert-az-do does not update the description of the existing work item, even when changes are spotted.")
 	//reopenTickets        = flag.Bool("reopen-tickets", true, "When false, alert-az-do does not reopen tickets.")
 	//maxDescriptionLength = flag.Int("max-description-length", defaultMaxDescriptionLength, "Maximum length of Descriptions. Truncate to this size avoid server errors.")
-	//updatePriority       = flag.Bool("update-priority", true, "When false, alert-az-do does not update the priority of the existing jira issue, even when changes are spotted.")
+	//updatePriority       = flag.Bool("update-priority", true, "When false, alert-az-do does not update the priority of the existing work item, even when changes are spotted.")
 	// Version is the build version, set by make to latest git tag/hash via `-ldflags "-X main.Version=$(VERSION)"`.
 	Version = "<local build>"
 )

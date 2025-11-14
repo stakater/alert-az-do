@@ -200,7 +200,7 @@ func TestRequiredReceiverConfigKeys(t *testing.T) {
 		config := testConfig{
 			Defaults:  defaultsConfig,
 			Receivers: []*receiverTestConfig{receiverConfig},
-			Template:  "azdotemplate.tmpl", // Fix: was jiratemplate.tmpl
+			Template:  "azdotemplate.tmpl",
 		}
 		configErrorTestRunner(t, config, test.errorMessage)
 	}

@@ -1,8 +1,8 @@
 # alert-az-do
 
-[![Build Status](https://github.com/jm-stakater/alert-az-do/actions/workflows/test.yaml/badge.svg?branch=master)](https://github.com/jm-stakater/alert-az-do/actions?query=workflow%3Atest)
-[![Go Report Card](https://goreportcard.com/badge/github.com/jm-stakater/alert-az-do)](https://goreportcard.com/report/github.com/jm-stakater/alert-az-do) 
-[![GoDoc](https://godoc.org/github.com/jm-stakater/alert-az-do?status.svg)](https://godoc.org/github.com/jm-stakater/alert-az-do)
+[![Build Status](https://github.com/stakater/alert-az-do/actions/workflows/test.yaml/badge.svg?branch=master)](https://github.com/stakater/alert-az-do/actions?query=workflow%3Atest)
+[![Go Report Card](https://goreportcard.com/badge/github.com/stakater/alert-az-do)](https://goreportcard.com/report/github.com/stakater/alert-az-do) 
+[![GoDoc](https://godoc.org/github.com/stakater/alert-az-do?status.svg)](https://godoc.org/github.com/stakater/alert-az-do)
 [![Slack](https://img.shields.io/badge/join%20slack-%23alert-az-do-brightgreen.svg)](https://slack.cncf.io/)
 
 [Prometheus Alertmanager](https://github.com/prometheus/alertmanager) webhook receiver for [Azure DevOps](https://azure.microsoft.com/en-us/products/devops/).
@@ -27,10 +27,10 @@ If a corresponding Azure DevOps work item already exists but is resolved, it is 
 
 ## Usage
 
-Get alert-az-do, either as a [packaged release](https://github.com/jm-stakater/alert-az-do/releases) or build it yourself:
+Get alert-az-do, either as a [packaged release](https://github.com/stakater/alert-az-do/releases) or build it yourself:
 
 ```bash
-go get github.com/jm-stakater/alert-az-do/cmd/alert-az-do
+go get github.com/stakater/alert-az-do/cmd/alert-az-do
 ```
 
 then run it from the command line:
@@ -310,7 +310,7 @@ spec:
     spec:
       containers:
       - name: alert-az-do
-        image: ghcr.io/jm-stakater/alert-az-do:latest
+        image: ghcr.io/stakater/alert-az-do:latest
         envFrom:
         - secretRef:
             name: alert-az-do-auth
@@ -342,7 +342,7 @@ docker run \
   -e AZURE_TENANT_ID="12345678-1234-1234-1234-123456789012" \
   -e AZURE_CLIENT_ID="87654321-4321-4321-4321-210987654321" \
   -e AZURE_CLIENT_SECRET="your-secret-here" \
-  ghcr.io/jm-stakater/alert-az-do:latest \
+  ghcr.io/stakater/alert-az-do:latest \
   -config /config/alert-az-do.yml
 ```
 
@@ -352,7 +352,7 @@ docker run \
   -v $(pwd)/config:/config \
   -p 9097:9097 \
   -e AZURE_PAT="your-pat-token-here" \
-  ghcr.io/jm-stakater/alert-az-do:latest \
+  ghcr.io/stakater/alert-az-do:latest \
   -config /config/alert-az-do.yml
 ```
 
@@ -360,7 +360,7 @@ docker run \
 ```bash
 docker run -v $(pwd)/config:/config \
   -p 9097:9097 \
-  ghcr.io/jm-stakater/alert-az-do:latest \
+  ghcr.io/stakater/alert-az-do:latest \
   -config /config/alert-az-do.yml
 ```
 
@@ -428,10 +428,10 @@ We welcome contributions! Please see our [contributing guidelines](CONTRIBUTING.
 
 alert-az-do is an open source project and we welcome new contributors and members of the community. Here are ways to get in touch with the community:
 
-* Issue Tracker: [GitHub Issues](https://github.com/jm-stakater/alert-az-do/issues)
+* Issue Tracker: [GitHub Issues](https://github.com/stakater/alert-az-do/issues)
 
 ## License
 
-alert-az-do is licensed under the [Apache License 2.0](https://github.com/jm-stakater/alert-az-do/blob/master/LICENSE).
+alert-az-do is licensed under the [Apache License 2.0](https://github.com/stakater/alert-az-do/blob/master/LICENSE).
 
 Copyright (c) 2025 Stakater AB

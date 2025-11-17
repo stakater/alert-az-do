@@ -26,9 +26,9 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/jm-stakater/alert-az-do/pkg/alertmanager"
-	"github.com/jm-stakater/alert-az-do/pkg/config"
-	"github.com/jm-stakater/alert-az-do/pkg/template"
+	"github.com/stakater/alert-az-do/pkg/alertmanager"
+	"github.com/stakater/alert-az-do/pkg/config"
+	"github.com/stakater/alert-az-do/pkg/template"
 
 	_ "net/http/pprof"
 

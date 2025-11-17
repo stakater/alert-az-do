@@ -20,7 +20,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/go-kit/log"
-	"github.com/jm-stakater/alert-az-do/pkg/config"
+	"github.com/stakater/alert-az-do/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

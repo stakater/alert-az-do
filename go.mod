@@ -1,4 +1,4 @@
-module github.com/jm-stakater/alert-az-do
+module github.com/stakater/alert-az-do
 
 go 1.25.4
 

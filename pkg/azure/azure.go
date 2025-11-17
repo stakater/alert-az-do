@@ -24,8 +24,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/jm-stakater/alert-az-do/pkg/config"
 	v7 "github.com/microsoft/azure-devops-go-api/azuredevops/v7"
+	"github.com/stakater/alert-az-do/pkg/config"
 
 	_ "net/http/pprof"
 )

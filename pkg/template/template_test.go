@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	"github.com/go-kit/log"
-	"github.com/jm-stakater/alert-az-do/pkg/alertmanager"
+	"github.com/stakater/alert-az-do/pkg/alertmanager"
 	"github.com/stretchr/testify/require"
 )
 

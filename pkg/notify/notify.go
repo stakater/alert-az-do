@@ -20,13 +20,13 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/jm-stakater/alert-az-do/pkg/alertmanager"
-	"github.com/jm-stakater/alert-az-do/pkg/config"
-	"github.com/jm-stakater/alert-az-do/pkg/template"
 	v7 "github.com/microsoft/azure-devops-go-api/azuredevops/v7"
 	"github.com/microsoft/azure-devops-go-api/azuredevops/v7/webapi"
 	"github.com/microsoft/azure-devops-go-api/azuredevops/v7/workitemtracking"
 	"github.com/pkg/errors"
+	"github.com/stakater/alert-az-do/pkg/alertmanager"
+	"github.com/stakater/alert-az-do/pkg/config"
+	"github.com/stakater/alert-az-do/pkg/template"
 )
 
 // Receiver wraps Azure DevOps client with configuration

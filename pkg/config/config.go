@@ -149,8 +149,8 @@ type ReceiverConfig struct {
 	StaticLabels    []string               `yaml:"static_labels" json:"static_labels"`
 
 	// Azure DevOps specific fields - Add missing fields
-	AreaPath      string `yaml:"area_path" json:"area_path"`
-	IterationPath string `yaml:"iteration_path" json:"iteration_path"`
+	//AreaPath      string `yaml:"area_path" json:"area_path"`
+	//IterationPath string `yaml:"iteration_path" json:"iteration_path"`
 
 	// Label copy settings
 	AddGroupLabels *bool `yaml:"add_group_labels" json:"add_group_labels"`
@@ -353,6 +353,9 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 			rc.AutoResolve = c.Defaults.AutoResolve
 		}
 		if len(c.Defaults.Fields) > 0 {
+			if rc.Fields == nil {
+				rc.Fields = make(map[string]interface{})
+			}
 			for key, value := range c.Defaults.Fields {
 				if _, ok := rc.Fields[key]; !ok {
 					rc.Fields[key] = value

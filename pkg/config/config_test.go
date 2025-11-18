@@ -69,14 +69,14 @@ receivers:
     project: XY
     # Overrides default.
     issue_type: Task
-    # Azure DevOps area path. Optional.
-    area_path: 'Operations'
-    # Azure DevOps iteration path. Optional.
-    iteration_path: 'Sprint 1'
     # Azure DevOps components. Optional.
     components: [ 'Operations' ]
     # Standard or custom field values to set on created work item. Optional.
     fields:
+      # Azure DevOps area path. Optional.
+      System.AreaPath: '\Operations'
+      # Azure DevOps iteration path. Optional.
+      System.IterationPath: '\Sprint 1'
       System.AssignedTo: "admin@contoso.com"
       Custom.Field: "{{ .CommonLabels.severity }}"
 

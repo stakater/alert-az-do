@@ -167,7 +167,9 @@ receivers:
     issue_type: Task
     fields:
       System.AssignedTo: '{{ .CommonLabels.owner }}'
-      
+      System.AreaPath: '\datacenter\Container'
+      System.IterationPath: '\datacenter'
+
   # Uses PAT authentication
   - name: 'team-gamma-pat'
     project: TeamGamma  
@@ -177,6 +179,16 @@ receivers:
 
 template: alert-az-do.tmpl
 ```
+
+You can find your IterationPath/AreaPath here:
+https://dev.azure.com/{organisation}/{project}/_apis/wit/classificationnodes?api-version=7.1&$depth=10
+
+Supported Item Types:
+https://dev.azure.com/{organisation}/{project}/_apis/wit/workitemtypes?api-version=7.1
+
+Field reference:
+https://dev.azure.com/{organisation}/{project}/_apis/wit/fields?api-version=7.1
+https://dev.azure.com/{organisation}/{project}/_apis/wit/workitemtypes/{Work Item Type}/fields?api-version=7.1
 
 #### Alternative Example - Environment Variable Override
 

@@ -17,6 +17,7 @@ package notify
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -71,18 +72,30 @@ func (r *Receiver) Notify(ctx context.Context, data *alertmanager.Data) error {
 
 		// Create new work item for firing alerts
 		return r.createWorkItem(ctx, data, project)
-	} else {
+	} else if r.conf.AutoResolve != nil {
 		// Resolve existing work item
 		return r.resolveWorkItem(ctx, data, project)
 	}
+	return nil
 }
 
 func (r *Receiver) updateWorkItem(ctx context.Context, data *alertmanager.Data, project string, workItemRef *workitemtracking.WorkItem) error {
+	if (*workItemRef.Fields)[WorkItemFieldState.String()] == r.conf.SkipReopenState {
+		level.Info(r.logger).Log("msg", "work item is in skip reopen state, not updating", "id", workItemRef.Id, "state", (*workItemRef.Fields)[WorkItemFieldState.String()])
+		return nil
+	}
 	document, err := r.generateWorkItemDocument(data, true)
 	if err != nil {
 		return errors.Wrap(err, "generate work item document")
 	}
 
+	if r.conf.AutoResolve != nil && (*workItemRef.Fields)[WorkItemFieldState.String()] == r.conf.AutoResolve.State {
+		document = append(document, webapi.JsonPatchOperation{
+			Op:    &webapi.OperationValues.Replace,
+			Path:  stringPtr(WorkItemFieldState.FieldPath()),
+			Value: r.conf.ReopenState,
+		})
+	}
 	payload := workitemtracking.UpdateWorkItemArgs{
 		Document:     &document,
 		Id:           workItemRef.Id,
@@ -131,13 +144,16 @@ func (r *Receiver) findWorkItem(ctx context.Context, data *alertmanager.Data, pr
 		return nil, errors.New("no alerts in data")
 	}
 
-	fingerprint := data.Alerts[0].Fingerprint
-	wiql := fmt.Sprintf("SELECT [%s] FROM WorkItems WHERE [%s] = '%s' AND [%s] CONTAINS 'Fingerprint:%s'",
+	var queryArgs []string
+	fingerprints := r.getFingerprints(data)
+	for _, a := range fingerprints {
+		queryArgs = append(queryArgs, fmt.Sprintf("[%s] CONTAINS '%s'", WorkItemFieldTags.String(), a))
+	}
+	wiql := fmt.Sprintf("SELECT [%s] FROM WorkItems WHERE [%s] = '%s' AND (%s)",
 		WorkItemFieldId.String(),
 		WorkItemFieldTeamProject.String(),
 		project,
-		WorkItemFieldTags.String(),
-		fingerprint)
+		strings.Join(queryArgs, " OR "))
 
 	query := workitemtracking.QueryByWiqlArgs{
 		Wiql: &workitemtracking.Wiql{
@@ -151,10 +167,10 @@ func (r *Receiver) findWorkItem(ctx context.Context, data *alertmanager.Data, pr
 	}
 
 	if len(*queryResult.WorkItems) == 0 {
-		level.Debug(r.logger).Log("msg", "no work items found", "fingerprint", fingerprint)
+		level.Debug(r.logger).Log("msg", "no work items found", "fingerprints", fingerprints)
 		return nil, nil
 	} else if len(*queryResult.WorkItems) > 1 {
-		level.Debug(r.logger).Log("msg", "duplicate fingerprint on work items found", "fingerprint", fingerprint)
+		level.Debug(r.logger).Log("msg", "duplicate fingerprint on work items found", "fingerprints", fingerprints)
 		return nil, nil
 	}
 
@@ -177,6 +193,14 @@ func (r *Receiver) resolveWorkItem(ctx context.Context, data *alertmanager.Data,
 	document, err := r.generateWorkItemDocument(data, false)
 	if err != nil {
 		return errors.Wrap(err, "generate resolve document")
+	}
+
+	if r.conf.AutoResolve.State != "" {
+		document = append(document, webapi.JsonPatchOperation{
+			Op:    &webapi.OperationValues.Replace,
+			Path:  stringPtr(WorkItemFieldState.FieldPath()),
+			Value: r.conf.AutoResolve.State,
+		})
 	}
 
 	payload := workitemtracking.UpdateWorkItemArgs{
@@ -227,11 +251,10 @@ func (r *Receiver) generateWorkItemDocument(data *alertmanager.Data, addFingerpr
 
 	// Add fingerprint tag if creating new work item
 	if addFingerprint && len(data.Alerts) > 0 {
-		fingerprint := data.Alerts[0].Fingerprint
 		document = append(document, webapi.JsonPatchOperation{
 			Op:    &webapi.OperationValues.Add,
 			Path:  stringPtr(WorkItemFieldTags.FieldPath()),
-			Value: fmt.Sprintf("Fingerprint:%s", fingerprint),
+			Value: strings.Join(r.getFingerprints(data), "; "),
 		})
 	}
 
@@ -271,6 +294,14 @@ func (r *Receiver) generateWorkItemDocument(data *alertmanager.Data, addFingerpr
 	}
 
 	return document, nil
+}
+
+func (r *Receiver) getFingerprints(data *alertmanager.Data) []string {
+	var fingerprints []string
+	for _, a := range data.Alerts {
+		fingerprints = append(fingerprints, fmt.Sprintf("Fingerprint:%s", a.Fingerprint))
+	}
+	return fingerprints
 }
 
 // Helper function to create string pointers

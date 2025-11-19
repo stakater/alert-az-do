@@ -91,8 +91,10 @@ endif
 # one and override "common-build" without override warnings.
 %: common-% ;
 
+# common-coverage also runs tests, so common-test is not needed when running common-coverage
 .PHONY: common-all
-common-all: precheck style check_license lint yamllint unused build test
+#common-all: precheck style check_license lint yamllint unused build test
+common-all: precheck style check_license lint yamllint unused build coverage
 
 .PHONY: common-style
 common-style:

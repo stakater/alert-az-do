@@ -25,18 +25,18 @@ import (
 
 // mockWorkItemTrackingClient implements the full workitemtracking.Client interface for testing
 type mockWorkItemTrackingClient struct {
-	workItems       map[int]*workitemtracking.WorkItem
-	nextID          int
-	workItemsByTag  map[string][]*workitemtracking.WorkItem
-	createCalls     []mockCreateCall
-	updateCalls     []mockUpdateCall
-	queryCalls      []string
-	
+	workItems      map[int]*workitemtracking.WorkItem
+	nextID         int
+	workItemsByTag map[string][]*workitemtracking.WorkItem
+	createCalls    []mockCreateCall
+	updateCalls    []mockUpdateCall
+	queryCalls     []string
+
 	// Error control flags for testing error paths
-	shouldFailCreate  bool
-	shouldFailUpdate  bool
-	shouldFailQuery   bool
-	duplicateResults  bool
+	shouldFailCreate bool
+	shouldFailUpdate bool
+	shouldFailQuery  bool
+	duplicateResults bool
 }
 
 type mockCreateCall struct {
@@ -49,9 +49,9 @@ type mockUpdateCall struct {
 
 func newMockWorkItemTrackingClient() *mockWorkItemTrackingClient {
 	return &mockWorkItemTrackingClient{
-		workItems:      make(map[int]*workitemtracking.WorkItem),
-		workItemsByTag: make(map[string][]*workitemtracking.WorkItem),
-		nextID:         1,
+		workItems:        make(map[int]*workitemtracking.WorkItem),
+		workItemsByTag:   make(map[string][]*workitemtracking.WorkItem),
+		nextID:           1,
 		shouldFailCreate: false,
 		shouldFailUpdate: false,
 		shouldFailQuery:  false,

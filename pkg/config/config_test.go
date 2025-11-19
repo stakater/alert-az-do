@@ -938,12 +938,12 @@ func TestConfig_String(t *testing.T) {
 	}
 
 	result := cfg.String()
-	
+
 	// Verify it's valid YAML by unmarshaling it back
 	var unmarshaled Config
 	err := yaml.Unmarshal([]byte(result), &unmarshaled)
 	require.NoError(t, err)
-	
+
 	// Verify key fields are preserved
 	require.Equal(t, cfg.Template, unmarshaled.Template)
 	require.Equal(t, cfg.Defaults.Name, unmarshaled.Defaults.Name)
@@ -1015,11 +1015,11 @@ template: test.tmpl
 // Test UnmarshalYAML with AutoResolve functionality
 func TestConfig_UnmarshalYAML_AutoResolve(t *testing.T) {
 	tests := []struct {
-		name      string
+		name       string
 		configYAML string
-		expectErr bool
-		errMsg    string
-		checkFunc func(t *testing.T, cfg *Config)
+		expectErr  bool
+		errMsg     string
+		checkFunc  func(t *testing.T, cfg *Config)
 	}{
 		{
 			name: "valid auto_resolve in defaults",
@@ -1044,7 +1044,7 @@ template: test.tmpl
 			checkFunc: func(t *testing.T, cfg *Config) {
 				require.NotNil(t, cfg.Defaults.AutoResolve)
 				require.Equal(t, "Closed", cfg.Defaults.AutoResolve.State)
-				
+
 				// Receiver should inherit AutoResolve
 				receiver := cfg.ReceiverByName("test-receiver")
 				require.NotNil(t, receiver.AutoResolve)
@@ -1127,7 +1127,7 @@ template: test.tmpl
 		t.Run(tt.name, func(t *testing.T) {
 			var cfg Config
 			err := yaml.Unmarshal([]byte(tt.configYAML), &cfg)
-			
+
 			if tt.expectErr {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tt.errMsg)
@@ -1185,9 +1185,9 @@ template: test.tmpl
 	require.NotNil(t, receiver2)
 	require.NotNil(t, receiver2.Fields)
 	// Should inherit from defaults but receiver fields take precedence
-	require.Equal(t, "\\default\\area", receiver2.Fields["System.AreaPath"]) // inherited
-	require.Equal(t, "Critical", receiver2.Fields["System.Priority"])        // overridden
-	require.Equal(t, "default-value", receiver2.Fields["Custom.DefaultField"]) // inherited
+	require.Equal(t, "\\default\\area", receiver2.Fields["System.AreaPath"])     // inherited
+	require.Equal(t, "Critical", receiver2.Fields["System.Priority"])            // overridden
+	require.Equal(t, "default-value", receiver2.Fields["Custom.DefaultField"])   // inherited
 	require.Equal(t, "receiver-value", receiver2.Fields["Custom.ReceiverField"]) // receiver-specific
 
 	// Test receiver with no fields (should still get defaults)
@@ -1222,7 +1222,7 @@ template: test.tmpl
 
 	// Verify that defaults was initialized and doesn't cause panics
 	require.NotNil(t, cfg.Defaults)
-	
+
 	// Verify receiver has its own values
 	receiver := cfg.ReceiverByName("test-receiver")
 	require.NotNil(t, receiver)

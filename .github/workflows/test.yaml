@@ -31,7 +31,7 @@ jobs:
         name: master.breakdown
         if_no_artifact_found: warn
 
-    - uses: vladopajic/go-test-coverage@v2.18.0
+    - uses: vladopajic/go-test-coverage@v2.18.3
       id: coverage
       continue-on-error: true # Should fail after coverage comment is posted
       with:

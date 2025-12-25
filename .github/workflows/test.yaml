@@ -24,7 +24,7 @@ jobs:
 
     - name: download artifact (master.breakdown)
       id: download-master-breakdown
-      uses: dawidd6/action-download-artifact@v11
+      uses: dawidd6/action-download-artifact@v12
       with:
         branch: master
         workflow_conclusion: success
